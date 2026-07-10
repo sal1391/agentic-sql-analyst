@@ -41,6 +41,20 @@ try:
 except ImportError:
     from snowflake_client import get_available_months
 
+
+def _llm_safe_history(history):
+    """Drop blocked exchanges (canned refusal + the user turn that caused it) before prompting."""
+    blocked_replies = {guardrails.BLOCK_MESSAGE, guardrails.LOCK_MESSAGE}
+    safe = []
+    for msg in history:
+        if msg.get("role") == "assistant" and msg.get("content") in blocked_replies:
+            if safe and safe[-1].get("role") == "user":
+                safe.pop()  # remove the offending question too
+            continue
+        safe.append(msg)
+    return safe
+
+
 # ── Page config ──────────────────────────────────────────────────────────
 
 st.set_page_config(
@@ -53,6 +67,10 @@ if IS_DEMO and not require_email():
     st.stop()
 
 st.title("📊 Month-over-Month Comparison")
+
+# Per-session cap on Compare runs in demo mode (mirrors guardrails' turn-cap
+# philosophy for the second LLM-calling entry point).
+MAX_COMPARES_PER_SESSION = 25
 
 # ── Chat avatars ─────────────────────────────────────────────────────────
 
@@ -138,10 +156,16 @@ with st.sidebar:
         try:
             months = get_available_months(session)
         except RuntimeError as _table_err:
-            st.error(str(_table_err))
+            if IS_DEMO:
+                st.error("The demo data could not be loaded. Please refresh the page.")
+            else:
+                st.error(str(_table_err))
             st.stop()
         except Exception as _table_err:
-            st.error(f"Failed to load months: {_table_err}")
+            if IS_DEMO:
+                st.error("The demo data could not be loaded. Please refresh the page.")
+            else:
+                st.error(f"Failed to load months: {_table_err}")
             st.stop()
 
     if not months:
@@ -189,7 +213,11 @@ with st.sidebar:
 
 # ── Run comparison ───────────────────────────────────────────────────────
 
-if compare_btn:
+if compare_btn and IS_DEMO and st.session_state.get("compare_count", 0) >= MAX_COMPARES_PER_SESSION:
+    st.warning("You've reached the comparison limit for this session.")
+elif compare_btn:
+    if IS_DEMO:
+        st.session_state.compare_count = st.session_state.get("compare_count", 0) + 1
     st.session_state.chat_history = []
     st.session_state.last_drilldown = None
     with st.spinner("🤖 Agent is generating SQL and analyzing data..."):
@@ -231,9 +259,9 @@ if result:
 
     st.subheader(f"Results: {ma} → {mb}")
 
-    # Debug SQL expander
+    # Debug SQL expander (hidden in demo — model-generated SQL is unfiltered here)
     debug_sql = result.get("_debug_sql", {})
-    if debug_sql:
+    if debug_sql and not IS_DEMO:
         with st.expander("🔍 Debug: Generated SQL"):
             st.markdown("**Month A (final)**")
             st.code(debug_sql.get("sql_a_final", result.get("sql_a", "")), language="sql")
@@ -282,9 +310,14 @@ if result:
             st.dataframe(result["df_b"], use_container_width=True)
 
     # SQL used
+    _sql_a = result.get("sql_a", "")
+    _sql_b = result.get("sql_b", "")
+    if IS_DEMO:
+        _sql_a = guardrails.filter_output(_sql_a, st.session_state)
+        _sql_b = guardrails.filter_output(_sql_b, st.session_state)
     with st.expander("🔧 SQL Queries Generated", expanded=False):
-        st.code(result.get("sql_a", ""), language="sql")
-        st.code(result.get("sql_b", ""), language="sql")
+        st.code(_sql_a, language="sql")
+        st.code(_sql_b, language="sql")
 
     st.divider()
 
@@ -333,7 +366,8 @@ if result:
                         dimensions=meta["dimensions"],
                         provider=meta["provider"],
                         model=meta.get("model"),
-                        chat_history=st.session_state.chat_history,
+                        chat_history=_llm_safe_history(st.session_state.chat_history) if IS_DEMO
+                        else st.session_state.chat_history,
                         prev_drilldown=st.session_state.last_drilldown,
                     )
                     answer = followup["answer"]
@@ -381,8 +415,11 @@ if result:
                             with tab_b:
                                 st.dataframe(followup.get("drilldown_df_b"), use_container_width=True)
                         if followup.get("drilldown_sql"):
+                            _new_cmp_sql = followup["drilldown_sql"]
+                            if IS_DEMO:
+                                _new_cmp_sql = guardrails.filter_output(_new_cmp_sql, st.session_state)
                             with st.expander("New Comparison SQL"):
-                                st.code(followup["drilldown_sql"], language="sql")
+                                st.code(_new_cmp_sql, language="sql")
 
                     # ── Error logged: show feedback ──────────────────
                     elif followup.get("logged_error"):
@@ -401,8 +438,11 @@ if result:
                             st.dataframe(followup["drilldown_df"],
                                          use_container_width=True)
                         if followup.get("drilldown_sql"):
+                            _drilldown_sql = followup["drilldown_sql"]
+                            if IS_DEMO:
+                                _drilldown_sql = guardrails.filter_output(_drilldown_sql, st.session_state)
                             with st.expander("Drilldown SQL"):
-                                st.code(followup["drilldown_sql"], language="sql")
+                                st.code(_drilldown_sql, language="sql")
                 except Exception as e:
                     if IS_DEMO:
                         st.error("The follow-up could not be completed. Please try again in a moment.")

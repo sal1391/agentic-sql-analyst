@@ -1,4 +1,4 @@
-streamlit[snowflake]>=1.54.0
+streamlit[snowflake]>=1.54.0,<1.60
 snowflake-connector-python>=3.3.0
 pandas>=2.0
 numpy>=1.26

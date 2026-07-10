@@ -7,13 +7,16 @@ dependencies = [
     "streamlit[snowflake]>=1.54.0",
     "pandas>=2.0",
     "plotly>=5.0",
+    "duckdb>=1.0",
+    "openai>=1.40",
+    "numpy>=1.26",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "ruff>=0.4",
-    "python-dotenv>=1.0",
 ]
 
 [tool.pytest.ini_options]
