@@ -11,7 +11,10 @@ import json
 import logging
 import re
 import pandas as pd
-from snowflake.snowpark import Session
+try:
+    from snowflake.snowpark import Session
+except ImportError:  # demo installs without Snowpark — Session is only a type hint here
+    Session = None
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +22,16 @@ try:
     from app.skill_loader import load_skill_tree
     from app.snowflake_client import execute_query, call_cortex_complete, get_table_columns, get_available_months, log_analysis_error
     from app.azure_client import call_azure_complete
-    from app.config import FULLY_QUALIFIED_TABLE
+    from app.openai_client import call_openai_complete
+    from app.config import FULLY_QUALIFIED_TABLE, IS_DEMO
+    from app.demo_log import log_event
 except ImportError:
     from skill_loader import load_skill_tree
     from snowflake_client import execute_query, call_cortex_complete, get_table_columns, get_available_months, log_analysis_error
     from azure_client import call_azure_complete
-    from config import FULLY_QUALIFIED_TABLE
+    from openai_client import call_openai_complete
+    from config import FULLY_QUALIFIED_TABLE, IS_DEMO
+    from demo_log import log_event
 
 
 # ── Dimension mapping (column → friendly name) ──────────────────────────
@@ -279,6 +286,8 @@ def _call_llm(prompt: str, provider: str, session: Session = None,
         return call_cortex_complete(session, prompt, model=model)
     elif provider == "azure":
         return call_azure_complete(prompt, model=model)
+    elif provider == "openai":
+        return call_openai_complete(prompt, model=model)
     else:
         raise ValueError(f"Unknown LLM provider: {provider}")
 
@@ -1400,7 +1409,11 @@ def run_followup(session: Session, question: str, month_a: str, month_b: str,
         }
 
         try:
-            log_analysis_error(session, question, context_json, error_reason)
+            if IS_DEMO:
+                log_event("analysis_error", question=question,
+                          context=context_json, reason=error_reason)
+            else:
+                log_analysis_error(session, question, context_json, error_reason)
             result["logged_error"] = True
         except Exception:
             pass  # don't break the user flow if logging fails
