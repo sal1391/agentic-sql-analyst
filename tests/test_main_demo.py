@@ -1,5 +1,34 @@
 """Demo-mode app boot via Streamlit AppTest: email gate, hidden provider, months load."""
+import pandas as pd
 from streamlit.testing.v1 import AppTest
+
+from app.agent import _compute_kpis, _compute_new_lost, _compute_top_movers
+from app.guardrails import LOCK_MESSAGE
+
+
+def _fake_result():
+    df = pd.DataFrame({
+        "CUSTOMER_NAME": ["Acme Lines", "Blue Corp"],
+        "VOLUME": [100.0, 200.0], "GP": [1000.0, 2400.0],
+        "MARGIN": [10.0, 12.0], "WON": [1, 2], "INQUIRIES": [2, 3], "LOST": [1, 1],
+    })
+    dims = ["CUSTOMER_NAME"]
+    return {
+        "kpis": _compute_kpis(df, df),
+        "narrative": "GP was flat month over month.",
+        "top_movers": _compute_top_movers(df, df, dims),
+        "new_lost": _compute_new_lost(df, df, dims),
+        "df_a": df, "df_b": df, "sql_a": "SELECT 1", "sql_b": "SELECT 1",
+    }
+
+
+_FAKE_META = {
+    "month_a": "2026-02-01",
+    "month_b": "2026-03-01",
+    "dimensions": ["CUSTOMER_NAME"],
+    "provider": "openai",
+    "model": None,
+}
 
 
 def _boot(**session_state):
@@ -34,7 +63,28 @@ def test_app_renders_after_email_with_no_provider_controls():
     assert "openai" not in page_text.lower() and "gpt" not in page_text.lower()
 
 
-def test_locked_session_hides_chat_input():
-    at = _boot(demo_email="visitor@example.com", gr_locked=True)
+def test_locked_session_hides_chat_input_and_warns():
+    at = _boot(
+        demo_email="visitor@example.com",
+        gr_locked=True,
+        comparison_result=_fake_result(),
+        compare_meta=dict(_FAKE_META),
+    )
     assert not at.exception
+    # results section rendered (chat section is only reachable with a result)
+    assert any("Results:" in str(el.value) for el in at.subheader)
+    # locked: no chat input, and the lock warning is shown
     assert len(at.chat_input) == 0
+    assert any(LOCK_MESSAGE in str(w.value) for w in at.warning)
+
+
+def test_unlocked_session_with_results_shows_chat_input():
+    at = _boot(
+        demo_email="visitor@example.com",
+        comparison_result=_fake_result(),
+        compare_meta=dict(_FAKE_META),
+    )
+    assert not at.exception
+    assert any("Results:" in str(el.value) for el in at.subheader)
+    assert len(at.chat_input) == 1
+    assert not any(LOCK_MESSAGE in str(w.value) for w in at.warning)
