@@ -13,38 +13,43 @@ User (Streamlit UI) → Agent Orchestrator → reads skills/ playbook
 
 The `skills/` folder is the LLM's knowledge base — it contains the data model, SQL patterns with few-shot examples, and analysis templates. No SQL or analysis logic is hardcoded.
 
-## Setup
+## Demo mode (default — no Snowflake needed)
 
-1. **Copy the env template:**
-   ```bash
-   cp .env.example .env
-   ```
+The app ships with a built-in demo: 18 months of realistic (fake) marine-fuel
+transactions in an in-process DuckDB, an AI analyst, an email gate, and strict
+topic guardrails on the chat.
 
-2. **Fill in your Snowflake credentials** in `.env`
-   - Set `SNOWFLAKE_DATABASE`, `SNOWFLAKE_SCHEMA`, and `SNOWFLAKE_TABLE` to the real object name.
-   - If the role can only access the current database/schema, keep those aligned with your Snowflake permissions.
+**Run locally:**
 
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+pip install -r requirements.txt
+# OPENAI_API_KEY must be set in your environment
+streamlit run app/main.py
+```
 
-4. **Run the app:**
-   ```bash
-   streamlit run app/main.py
-   ```
+**Deploy on Railway:**
+
+1. Push this repo to GitHub and create a new Railway service from it
+   (`railway.toml` provides the start command).
+2. Set service variables: `OPENAI_API_KEY` (required), `OPENAI_MODEL`
+   (optional, default `gpt-4o-mini`), `DEPLOY_MODE=demo` (optional — demo is
+   already the default).
+3. Deploy. Email entries and guardrail events appear in the Railway log
+   console as `[demo-log]` lines.
+
+To run against real Snowflake instead, set `DEPLOY_MODE=local` (or `aws`/`sis`)
+and fill in the Snowflake variables from `.env.example`.
 
 ## Usage
 
-1. Select an **LLM provider** (Snowflake Cortex or Azure AI Foundry)
-2. Pick **Month A** (baseline) and **Month B** (comparison)
-3. Choose which **dimensions** to group by (Customer, Port, Broker, etc.)
-4. Click **Compare** — the agent generates SQL, runs it, and produces:
+1. Pick **Month A** (baseline) and **Month B** (comparison)
+2. Choose which **dimensions** to group by (Customer, Port, Broker, etc.)
+3. Click **Compare** — the agent generates SQL, runs it, and produces:
    - KPI summary cards with deltas
    - Bar charts (side-by-side + change waterfall)
    - Auto-generated narrative insights
    - Raw data tables
-5. Ask **follow-up questions** in the chat (e.g., "Why did GP drop for Customer X?")
+4. Ask **follow-up questions** in the chat (e.g., "Why did GP drop for Customer X?")
 
 ## Skills Folder Structure
 
