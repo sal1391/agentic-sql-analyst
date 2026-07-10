@@ -31,5 +31,15 @@ def test_log_event_survives_unwritable_dir(tmp_path, capsys, monkeypatch):
     assert "[demo-log]" in capsys.readouterr().out
 
 
+def test_log_event_survives_unserializable_fields(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(demo_log, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(demo_log, "LOG_FILE", tmp_path / "entries.jsonl")
+    circular = {}
+    circular["self"] = circular
+    demo_log.log_event("weird", data={(1, 2): "tuple-key"}, loop=circular)  # must not raise
+    out = capsys.readouterr().out
+    assert "[demo-log]" in out
+
+
 def _raise_oserror(*args, **kwargs):
     raise OSError("read-only fs")
