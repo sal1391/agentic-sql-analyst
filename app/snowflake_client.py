@@ -3,7 +3,10 @@ Snowflake client — session management, query execution, and Cortex LLM calls.
 """
 import streamlit as st
 import pandas as pd
-from snowflake.snowpark import Session
+try:
+    from snowflake.snowpark import Session
+except ImportError:  # demo installs without Snowpark — Session is only a type hint here
+    Session = None
 try:
     from app.config import SNOWFLAKE_CONNECTION, CORTEX_MODEL, FULLY_QUALIFIED_TABLE, DEPLOY_MODE
 except ImportError:
