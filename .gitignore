@@ -1,0 +1,15 @@
+.env
+__pycache__/
+*.pyc
+*.py[cod]
+.streamlit/secrets.toml
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+output/
+*.log
+.idea/
+.DS_Store
+Thumbs.db

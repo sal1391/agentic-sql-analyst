@@ -1,0 +1,47 @@
+definition_version: 2
+entities:
+  mom_comparison:
+    type: streamlit
+    identifier:
+      name: MOM_COMPARISON
+      database: SANDBOX
+      schema: ANALYTICS
+    query_warehouse: ANALYTICS_WH
+    runtime_name: SYSTEM$ST_CONTAINER_RUNTIME_PY3_11
+    compute_pool: SYSTEM_COMPUTE_POOL_CPU
+    external_access_integrations:
+      - ALLOW_ALL_EAI
+    main_file: app/main.py
+    artifacts:
+      # Entry point
+      - app/main.py
+      # App modules
+      - app/__init__.py
+      - app/agent.py
+      - app/azure_client.py
+      - app/config.py
+      - app/skill_loader.py
+      - app/snowflake_client.py
+      # Assets
+      - app/assets/trident.png
+      # Components
+      - app/components/__init__.py
+      - app/components/charts.py
+      - app/components/kpi_cards.py
+      - app/components/narrative.py
+      # Skills playbook (loaded at runtime by skill_loader.py)
+      - skills/SKILL.md
+      - skills/analysis/SKILL.md
+      - skills/analysis/mom-patterns.md
+      - skills/references/data-model.md
+      - skills/references/dimensions.md
+      - skills/sql-patterns/SKILL.md
+      - skills/sql-patterns/add-field.md
+      - skills/sql-patterns/aggregation.md
+      - skills/sql-patterns/comparison.md
+      - skills/sql-patterns/drilldown.md
+      # Dependencies (container runtime requires pyproject.toml for pip installs)
+      - pyproject.toml
+      - environment.yml
+      # Secrets (sets DEPLOY_MODE and other config for SiS)
+      - .streamlit/secrets.toml
