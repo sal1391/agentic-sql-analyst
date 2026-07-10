@@ -17,9 +17,11 @@ import time
 try:
     from app.config import GUARDRAIL_MODEL
     from app.demo_log import log_event
+    from app.openai_client import GENERIC_LLM_ERROR
 except ImportError:
     from config import GUARDRAIL_MODEL
     from demo_log import log_event
+    from openai_client import GENERIC_LLM_ERROR
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +30,7 @@ LOCK_MESSAGE = "The assistant is unavailable for the rest of this session."
 LIMIT_MESSAGE = "You've reached the question limit for this session."
 SLOW_DOWN_MESSAGE = "Please wait a few seconds between questions."
 TOO_LONG_MESSAGE = "Please keep questions under 500 characters."
-UNAVAILABLE_MESSAGE = "The analyst is temporarily unavailable. Please try again in a moment."
+UNAVAILABLE_MESSAGE = GENERIC_LLM_ERROR
 
 MAX_QUESTION_CHARS = 500
 MAX_TURNS_PER_SESSION = 20
@@ -140,9 +142,13 @@ def check_question(question: str, state) -> tuple[bool, str]:
     return True, ""
 
 
-def filter_output(text: str) -> str:
+def filter_output(text: str, state=None) -> str:
     """Replace any provider/prompt leak with a generic refusal (no strike)."""
     if text and _LEAK_PATTERNS.search(text):
-        log_event("output_filtered", snippet=text[:200])
+        log_event(
+            "output_filtered",
+            email=state.get("demo_email", "") if state else "",
+            snippet=text[:200],
+        )
         return BLOCK_MESSAGE
     return text

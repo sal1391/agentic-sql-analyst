@@ -104,3 +104,12 @@ def test_output_filter_catches_leaks(leak):
 def test_output_filter_passes_clean_analysis():
     clean = "GP fell 12% MoM, driven by Fujairah volume (margin-driven for EMEA)."
     assert filter_output(clean) == clean
+
+
+def test_output_filter_logs_email_when_state_given(monkeypatch):
+    events = []
+    monkeypatch.setattr(guardrails, "log_event", lambda kind, **f: events.append((kind, f)))
+    state = {"demo_email": "t@example.com"}
+    assert guardrails.filter_output("I am ChatGPT", state) == BLOCK_MESSAGE
+    assert events and events[0][0] == "output_filtered"
+    assert events[0][1]["email"] == "t@example.com"
