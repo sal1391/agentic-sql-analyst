@@ -1,11 +1,33 @@
 """Demo-mode config: defaults, OpenAI vars, and no AWS/Snowflake side effects."""
 import importlib
+import os
 import sys
+
+import pytest
+
+_ENV_KEYS = ("DEPLOY_MODE", "OPENAI_API_KEY", "OPENAI_MODEL")
+
+
+@pytest.fixture(autouse=True)
+def _restore_config_module():
+    """Undo the sys.modules mutation _fresh_config performs.
+
+    importlib.reload(app.config) reloads the shared module object in place,
+    so a leftover override (e.g. DEPLOY_MODE="local") would otherwise leak
+    into every other test/module that does `from app.config import ...`
+    afterwards — including Streamlit AppTest, which re-executes app/main.py's
+    import block (and therefore re-reads app.config) on every run.
+    """
+    yield
+    for key in _ENV_KEYS:
+        os.environ.pop(key, None)
+    sys.modules.pop("app.config", None)
+    import app.config  # noqa: F401  (re-import so later tests see a clean module)
 
 
 def _fresh_config(monkeypatch, **env):
     """Reload app.config with a controlled environment."""
-    for key in ("DEPLOY_MODE", "OPENAI_API_KEY", "OPENAI_MODEL"):
+    for key in _ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
     for key, val in env.items():
         monkeypatch.setenv(key, val)

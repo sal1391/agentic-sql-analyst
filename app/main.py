@@ -9,19 +9,37 @@ import streamlit as st
 # Note: load_dotenv is called inside config.py before all os.getenv calls
 
 try:
-    from app.config import LLM_PROVIDER, CORTEX_MODEL, AZURE_MODEL, FULLY_QUALIFIED_TABLE, DEPLOY_MODE
-    from app.snowflake_client import get_session, get_available_months
+    from app.config import LLM_PROVIDER, CORTEX_MODEL, AZURE_MODEL, FULLY_QUALIFIED_TABLE, DEPLOY_MODE, IS_DEMO
     from app.agent import DIMENSIONS, run_comparison, run_followup
     from app.components.kpi_cards import render_kpi_cards
     from app.components.charts import render_comparison_charts, render_metric_selector
     from app.components.narrative import render_narrative, render_top_movers, render_new_lost, escape_dollars
+    from app import guardrails
+    from app.email_gate import require_email
 except ImportError:
-    from config import LLM_PROVIDER, CORTEX_MODEL, AZURE_MODEL, FULLY_QUALIFIED_TABLE, DEPLOY_MODE
-    from snowflake_client import get_session, get_available_months
+    from config import LLM_PROVIDER, CORTEX_MODEL, AZURE_MODEL, FULLY_QUALIFIED_TABLE, DEPLOY_MODE, IS_DEMO
     from agent import DIMENSIONS, run_comparison, run_followup
     from components.kpi_cards import render_kpi_cards
     from components.charts import render_comparison_charts, render_metric_selector
     from components.narrative import render_narrative, render_top_movers, render_new_lost, escape_dollars
+    import guardrails
+    from email_gate import require_email
+
+if IS_DEMO:
+    try:
+        from app.local_session import get_local_session
+    except ImportError:
+        from local_session import get_local_session
+else:
+    try:
+        from app.snowflake_client import get_session
+    except ImportError:
+        from snowflake_client import get_session
+
+try:
+    from app.snowflake_client import get_available_months
+except ImportError:
+    from snowflake_client import get_available_months
 
 # ── Page config ──────────────────────────────────────────────────────────
 
@@ -30,6 +48,9 @@ st.set_page_config(
     page_icon="📊",
     layout="wide",
 )
+
+if IS_DEMO and not require_email():
+    st.stop()
 
 st.title("📊 Month-over-Month Comparison")
 
@@ -53,17 +74,22 @@ if "last_drilldown" not in st.session_state:
 
 # ── Snowflake session ────────────────────────────────────────────────────
 
-@st.cache_resource(show_spinner="Connecting to Snowflake...")
+@st.cache_resource(show_spinner="Loading data...")
 def _get_session():
+    if IS_DEMO:
+        return get_local_session()
     return get_session()
 
 try:
     session = _get_session()
 except Exception as _conn_err:
-    st.error(
-        f"**Cannot connect to Snowflake.** Check your `.env` credentials.\n\n"
-        f"```\n{_conn_err}\n```"
-    )
+    if IS_DEMO:
+        st.error("The demo data could not be loaded. Please refresh the page.")
+    else:
+        st.error(
+            f"**Cannot connect to Snowflake.** Check your `.env` credentials.\n\n"
+            f"```\n{_conn_err}\n```"
+        )
     st.stop()
 
 # ── Sidebar controls ─────────────────────────────────────────────────────
@@ -71,8 +97,11 @@ except Exception as _conn_err:
 with st.sidebar:
     st.header("Settings")
 
-    # LLM provider toggle (Azure not available in SiS — no external network access)
-    if DEPLOY_MODE == "sis":
+    # LLM provider toggle (hidden in demo; Azure not available in SiS)
+    if IS_DEMO:
+        provider = "openai"
+        model = None  # openai_client falls back to OPENAI_MODEL
+    elif DEPLOY_MODE == "sis":
         provider = "cortex"
         model = st.text_input("Cortex Model", value=CORTEX_MODEL, key="cortex_model_input")
     else:
@@ -92,16 +121,17 @@ with st.sidebar:
     st.divider()
     st.header("Comparison")
 
-    # Show active configuration
-    with st.expander("⚙️ Active configuration", expanded=False):
-        st.code(
-            f"Table : {FULLY_QUALIFIED_TABLE}\n"
-            f"LLM   : {LLM_PROVIDER} / {CORTEX_MODEL if LLM_PROVIDER == 'cortex' else AZURE_MODEL}",
-            language="text",
-        )
-        st.caption(
-            "Adjust `SNOWFLAKE_DATABASE`, `SNOWFLAKE_SCHEMA`, `SNOWFLAKE_TABLE` in `.env` to change the table."
-        )
+    # Show active configuration (never in demo — it names the LLM backend)
+    if not IS_DEMO:
+        with st.expander("⚙️ Active configuration", expanded=False):
+            st.code(
+                f"Table : {FULLY_QUALIFIED_TABLE}\n"
+                f"LLM   : {LLM_PROVIDER} / {CORTEX_MODEL if LLM_PROVIDER == 'cortex' else AZURE_MODEL}",
+                language="text",
+            )
+            st.caption(
+                "Adjust `SNOWFLAKE_DATABASE`, `SNOWFLAKE_SCHEMA`, `SNOWFLAKE_TABLE` in `.env` to change the table."
+            )
 
     # Load available months
     with st.spinner("Loading months..."):
@@ -181,10 +211,13 @@ if compare_btn:
                 "model": model,
             }
         except Exception as e:
-            st.error(f"Comparison failed: {e}")
-            import traceback
-            with st.expander("🔍 Error Trace", expanded=True):
-                st.code(traceback.format_exc(), language="text")
+            if IS_DEMO:
+                st.error("The comparison could not be completed. Please try again in a moment.")
+            else:
+                st.error(f"Comparison failed: {e}")
+                import traceback
+                with st.expander("🔍 Error Trace", expanded=True):
+                    st.code(traceback.format_exc(), language="text")
             st.session_state.comparison_result = None
 
 # ── Display results ──────────────────────────────────────────────────────
@@ -233,7 +266,8 @@ if result:
     st.divider()
 
     # Narrative
-    render_narrative(result.get("narrative", ""))
+    _narrative = result.get("narrative", "")
+    render_narrative(guardrails.filter_output(_narrative, st.session_state) if IS_DEMO else _narrative)
     render_top_movers(result.get("top_movers", []))
     render_new_lost(result.get("new_lost", {}), ma, mb)
 
@@ -263,7 +297,23 @@ if result:
         with st.chat_message(msg["role"], avatar=CHAT_AVATARS.get(msg["role"])):
             st.markdown(escape_dollars(msg["content"]))
 
-    question = st.chat_input("e.g., Why did GP drop for Customer X?", key="followup_chat_input")
+    if IS_DEMO and guardrails.is_locked(st.session_state):
+        st.warning(guardrails.LOCK_MESSAGE
+                   if st.session_state.get("gr_locked") else guardrails.LIMIT_MESSAGE)
+        question = None
+    else:
+        question = st.chat_input("e.g., Why did GP drop for Customer X?", key="followup_chat_input")
+
+    if question and IS_DEMO:
+        allowed, block_msg = guardrails.check_question(question, st.session_state)
+        if not allowed:
+            st.session_state.chat_history.append({"role": "user", "content": question})
+            with st.chat_message("user", avatar=CHAT_AVATARS["user"]):
+                st.markdown(question)
+            with st.chat_message("assistant", avatar=CHAT_AVATARS["assistant"]):
+                st.markdown(block_msg)
+            st.session_state.chat_history.append({"role": "assistant", "content": block_msg})
+            question = None
 
     if question:
         st.session_state.chat_history.append({"role": "user", "content": question})
@@ -287,6 +337,8 @@ if result:
                         prev_drilldown=st.session_state.last_drilldown,
                     )
                     answer = followup["answer"]
+                    if IS_DEMO:
+                        answer = guardrails.filter_output(answer, st.session_state)
                     st.markdown(escape_dollars(answer))
                     st.session_state.chat_history.append(
                         {"role": "assistant", "content": answer}
@@ -352,6 +404,9 @@ if result:
                             with st.expander("Drilldown SQL"):
                                 st.code(followup["drilldown_sql"], language="sql")
                 except Exception as e:
-                    st.error(f"Follow-up failed: {e}")
+                    if IS_DEMO:
+                        st.error("The follow-up could not be completed. Please try again in a moment.")
+                    else:
+                        st.error(f"Follow-up failed: {e}")
 else:
     st.info("👈 Select two months and dimensions in the sidebar, then click **Compare**.")
