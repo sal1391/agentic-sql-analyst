@@ -29,7 +29,8 @@ def _get_config(key: str, default: str = "") -> str:
 # ============================================================
 # DEPLOYMENT MODE
 # ============================================================
-DEPLOY_MODE = _get_config("DEPLOY_MODE", "local")  # "local" | "aws" | "sis"
+DEPLOY_MODE = _get_config("DEPLOY_MODE", "demo")  # "demo" | "local" | "aws" | "sis"
+IS_DEMO = DEPLOY_MODE == "demo"
 
 # ============================================================
 # LLM PROVIDER CONFIG
@@ -41,6 +42,13 @@ CORTEX_MODEL = _get_config("CORTEX_MODEL", "claude-sonnet-4-5")
 AZURE_ENDPOINT = _get_config("AZURE_ENDPOINT")
 AZURE_API_KEY = _get_config("AZURE_API_KEY")
 AZURE_MODEL = _get_config("AZURE_MODEL")
+
+# ============================================================
+# DEMO MODE — OpenAI-backed analyst (provider hidden from users)
+# ============================================================
+OPENAI_API_KEY = _get_config("OPENAI_API_KEY")
+OPENAI_MODEL = _get_config("OPENAI_MODEL", "gpt-4o-mini")
+GUARDRAIL_MODEL = "gpt-4o-mini"  # topic classifier — always the cheap model
 
 # ============================================================
 # LOCAL MODE — Reads credentials from environment variables
@@ -79,7 +87,10 @@ def _get_secret(secret_name):
 # ============================================================
 # RESOLVED CONFIG — Used by the rest of the app
 # ============================================================
-if DEPLOY_MODE == "local":
+if DEPLOY_MODE == "demo":
+    # Demo mode: DuckDB + built-in data, no Snowflake at all
+    SNOWFLAKE_CONNECTION = None
+elif DEPLOY_MODE == "local":
     SNOWFLAKE_CONNECTION = _LOCAL_SNOWFLAKE_CONNECTION
 elif DEPLOY_MODE == "sis":
     # Streamlit-in-Snowflake: session comes from st.connection("snowflake")
