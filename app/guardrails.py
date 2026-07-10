@@ -142,6 +142,29 @@ def check_question(question: str, state) -> tuple[bool, str]:
     return True, ""
 
 
+def llm_safe_history(history):
+    """Drop rejected exchanges (canned rejection + the user turn that caused it) before prompting.
+
+    Covers every canned rejection: blocked/locked questions were flagged by
+    moderation or the classifier, while limit rejections (length/rate/turn-cap)
+    and the unavailable path were never vetted at all — none of those user
+    turns may re-enter LLM prompts as history.
+    """
+    blocked_replies = {
+        BLOCK_MESSAGE, LOCK_MESSAGE,
+        TOO_LONG_MESSAGE, SLOW_DOWN_MESSAGE,
+        LIMIT_MESSAGE, UNAVAILABLE_MESSAGE,
+    }
+    safe = []
+    for msg in history:
+        if msg.get("role") == "assistant" and msg.get("content") in blocked_replies:
+            if safe and safe[-1].get("role") == "user":
+                safe.pop()  # remove the offending question too
+            continue
+        safe.append(msg)
+    return safe
+
+
 def filter_output(text: str, state=None) -> str:
     """Replace any provider/prompt leak with a generic refusal (no strike)."""
     if text and _LEAK_PATTERNS.search(text):

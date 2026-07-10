@@ -41,19 +41,9 @@ try:
 except ImportError:
     from snowflake_client import get_available_months
 
-
-def _llm_safe_history(history):
-    """Drop blocked exchanges (canned refusal + the user turn that caused it) before prompting."""
-    blocked_replies = {guardrails.BLOCK_MESSAGE, guardrails.LOCK_MESSAGE}
-    safe = []
-    for msg in history:
-        if msg.get("role") == "assistant" and msg.get("content") in blocked_replies:
-            if safe and safe[-1].get("role") == "user":
-                safe.pop()  # remove the offending question too
-            continue
-        safe.append(msg)
-    return safe
-
+# Drops canned-rejection exchanges from the history passed to the LLM
+# (the displayed transcript keeps them).
+_llm_safe_history = guardrails.llm_safe_history
 
 # ── Page config ──────────────────────────────────────────────────────────
 

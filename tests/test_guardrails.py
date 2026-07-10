@@ -113,3 +113,18 @@ def test_output_filter_logs_email_when_state_given(monkeypatch):
     assert guardrails.filter_output("I am ChatGPT", state) == BLOCK_MESSAGE
     assert events and events[0][0] == "output_filtered"
     assert events[0][1]["email"] == "t@example.com"
+
+
+def test_llm_safe_history_drops_all_canned_rejections():
+    from app.guardrails import (BLOCK_MESSAGE, LOCK_MESSAGE, TOO_LONG_MESSAGE,
+                                SLOW_DOWN_MESSAGE, LIMIT_MESSAGE, UNAVAILABLE_MESSAGE,
+                                llm_safe_history)
+    history = [{"role": "user", "content": "legit question"},
+               {"role": "assistant", "content": "legit answer"}]
+    for canned in [BLOCK_MESSAGE, LOCK_MESSAGE, TOO_LONG_MESSAGE,
+                   SLOW_DOWN_MESSAGE, LIMIT_MESSAGE, UNAVAILABLE_MESSAGE]:
+        history += [{"role": "user", "content": "x" * 501},
+                    {"role": "assistant", "content": canned}]
+    safe = llm_safe_history(history)
+    assert safe == [{"role": "user", "content": "legit question"},
+                    {"role": "assistant", "content": "legit answer"}]
