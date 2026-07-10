@@ -41,7 +41,7 @@ def _get_client():
     if _client is None:
         if not OPENAI_API_KEY:
             logger.error("LLM key is not configured")
-            raise RuntimeError(GENERIC_LLM_ERROR)
+            raise RuntimeError(GENERIC_LLM_ERROR) from None
         from openai import OpenAI  # deferred import: keep module import cheap
         _client = OpenAI(api_key=OPENAI_API_KEY)
     return _client

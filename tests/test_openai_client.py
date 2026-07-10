@@ -62,6 +62,16 @@ def test_missing_key_is_concealed(monkeypatch):
     assert str(exc_info.value) == GENERIC_LLM_ERROR
 
 
+def test_missing_key_via_call_is_concealed(monkeypatch):
+    monkeypatch.setattr(openai_client, "OPENAI_API_KEY", "")
+    monkeypatch.setattr(openai_client, "_client", None)
+    with pytest.raises(RuntimeError) as exc_info:
+        call_openai_complete("hi")
+    assert str(exc_info.value) == GENERIC_LLM_ERROR
+    assert exc_info.value.__cause__ is None
+    assert exc_info.value.__context__ is None
+
+
 def test_system_prompt_hardening_content():
     sp = openai_client.SYSTEM_PROMPT.lower()
     assert "never" in sp                      # concealment directives present
