@@ -1,0 +1,9 @@
+# Local scratch and caches — never part of the deploy image
+.superpowers/
+demo_logs/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.git/
+tests/
+docs/
