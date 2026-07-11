@@ -84,15 +84,19 @@ def _call_moderation(question: str) -> bool:
 
 
 def _call_classifier(question: str) -> str:
+    try:
+        from app.openai_client import completion_params
+    except ImportError:
+        from openai_client import completion_params
     response = _client().chat.completions.create(
         model=GUARDRAIL_MODEL,
         messages=[
             {"role": "system", "content": CLASSIFIER_INSTRUCTIONS},
             {"role": "user", "content": question},
         ],
-        temperature=0,
-        max_tokens=3,
         timeout=30,
+        **completion_params(GUARDRAIL_MODEL, max_completion_tokens=16,
+                            temperature=0),
     )
     return (response.choices[0].message.content or "").strip().upper()
 

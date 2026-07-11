@@ -44,6 +44,32 @@ def test_explicit_model_wins(monkeypatch):
     assert fake.last_kwargs["model"] == "gpt-4o"
 
 
+def test_uses_max_completion_tokens_never_max_tokens(monkeypatch):
+    """Reasoning-family models (gpt-5*, o*) reject the legacy max_tokens param."""
+    fake = _FakeCompletions(reply="ok")
+    _install_fake(monkeypatch, fake)
+    call_openai_complete("hi", model="gpt-4o-mini")
+    assert "max_tokens" not in fake.last_kwargs
+    assert fake.last_kwargs["max_completion_tokens"] > 0
+
+
+def test_temperature_sent_for_standard_models(monkeypatch):
+    fake = _FakeCompletions(reply="ok")
+    _install_fake(monkeypatch, fake)
+    call_openai_complete("hi", model="gpt-4o-mini")
+    assert fake.last_kwargs["temperature"] == 0.1
+
+
+@pytest.mark.parametrize("model", ["gpt-5-nano", "gpt-5", "o1-mini", "o3", "o4-mini"])
+def test_temperature_omitted_for_reasoning_models(monkeypatch, model):
+    """Reasoning-family models only accept the default temperature."""
+    fake = _FakeCompletions(reply="ok")
+    _install_fake(monkeypatch, fake)
+    call_openai_complete("hi", model=model)
+    assert "temperature" not in fake.last_kwargs
+    assert "max_tokens" not in fake.last_kwargs
+
+
 def test_provider_errors_are_concealed(monkeypatch):
     _install_fake(monkeypatch, _FakeCompletions(error=Exception("openai.RateLimitError: gpt-4o-mini quota")))
     with pytest.raises(RuntimeError) as exc_info:

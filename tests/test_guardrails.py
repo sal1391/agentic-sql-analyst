@@ -12,6 +12,10 @@ from app.guardrails import (
 )
 
 
+# Captured before the autouse fixture stubs it, for tests of the real implementation
+_REAL_CALL_CLASSIFIER = guardrails._call_classifier
+
+
 @pytest.fixture(autouse=True)
 def quiet_and_stubbed(monkeypatch):
     """No network, no real clock coupling, no log files."""
@@ -104,6 +108,27 @@ def test_output_filter_catches_leaks(leak):
 def test_output_filter_passes_clean_analysis():
     clean = "GP fell 12% MoM, driven by Fujairah volume (margin-driven for EMEA)."
     assert filter_output(clean) == clean
+
+
+def test_classifier_uses_model_agnostic_params(monkeypatch):
+    """Classifier must send max_completion_tokens (not legacy max_tokens)."""
+    from types import SimpleNamespace
+
+    captured = {}
+
+    def fake_create(**kwargs):
+        captured.update(kwargs)
+        msg = SimpleNamespace(content="ALLOW")
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg)])
+
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create))
+    )
+    monkeypatch.setattr(guardrails, "_client", lambda: fake_client)
+    assert _REAL_CALL_CLASSIFIER("volume by port?") == "ALLOW"
+    assert "max_tokens" not in captured
+    assert captured["max_completion_tokens"] == 16
+    assert captured["temperature"] == 0  # GUARDRAIL_MODEL is a standard model
 
 
 def test_output_filter_logs_email_when_state_given(monkeypatch):

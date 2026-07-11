@@ -34,6 +34,24 @@ help with the data instead.
 
 _client = None
 
+# Reasoning-family models reject the legacy `max_tokens` parameter and any
+# non-default `temperature`; standard chat models accept `max_completion_tokens`
+# too, so it is safe to send for every model.
+_REASONING_MODEL_PREFIXES = ("gpt-5", "o1", "o3", "o4")
+
+
+def _is_reasoning_model(model: str) -> bool:
+    return (model or "").lower().startswith(_REASONING_MODEL_PREFIXES)
+
+
+def completion_params(model: str, max_completion_tokens: int,
+                      temperature: float = None) -> dict:
+    """Token/temperature kwargs valid for both standard and reasoning models."""
+    params = {"max_completion_tokens": max_completion_tokens}
+    if temperature is not None and not _is_reasoning_model(model):
+        params["temperature"] = temperature
+    return params
+
 
 def _get_client():
     """Create the SDK client lazily so importing this module never needs a key."""
@@ -49,16 +67,18 @@ def _get_client():
 
 def call_openai_complete(prompt: str, model: str = None) -> str:
     """LLM completion with the hardened system prompt. Mirrors call_azure_complete."""
+    resolved_model = model or OPENAI_MODEL
     try:
         response = _get_client().chat.completions.create(
-            model=model or OPENAI_MODEL,
+            model=resolved_model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.1,
-            max_tokens=4096,
             timeout=120,
+            # reasoning models spend completion tokens on thinking, so leave headroom
+            **completion_params(resolved_model, max_completion_tokens=8192,
+                                temperature=0.1),
         )
         return response.choices[0].message.content or ""
     except RuntimeError:
