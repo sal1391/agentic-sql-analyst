@@ -88,3 +88,47 @@ class TestStripHashComments:
     def test_truncates_inline_hash_comment(self):
         sql = "SELECT 1  # trailing note"
         assert _strip_hash_comments(sql) == "SELECT 1"
+
+
+class TestParseAnalysis:
+    """_parse_analysis must never leak ===MARKER=== blocks into the narrative."""
+
+    FULL = (
+        "===KPI_JSON===\n{\"volume\": {\"month_a\": 1}}\n===END_KPI_JSON===\n\n"
+        "===NARRATIVE===\nVolume fell 7%.\n===END_NARRATIVE==="
+    )
+    MISSING_END = (
+        "===KPI_JSON===\n{\"volume\": {\"month_a\": 1}}\n===END_KPI_JSON===\n\n"
+        "===NARRATIVE===\nVolume fell 7%.\nMargin held steady."
+    )
+    NO_MARKERS_AT_ALL = "Volume fell 7%. Margin held steady."
+    KPI_ONLY_NO_NARRATIVE_MARKER = (
+        "===KPI_JSON===\n{\"volume\": {\"month_a\": 1}}\n===END_KPI_JSON===\n"
+        "Volume fell 7%."
+    )
+
+    def test_well_formed_response_unchanged(self):
+        from app.agent import _parse_analysis
+        parsed = _parse_analysis(self.FULL)
+        assert parsed["narrative"] == "Volume fell 7%."
+        assert parsed["kpis"] == {"volume": {"month_a": 1}}
+
+    def test_missing_end_marker_still_yields_clean_narrative(self):
+        from app.agent import _parse_analysis
+        parsed = _parse_analysis(self.MISSING_END)
+        assert "===" not in parsed["narrative"]
+        assert "KPI_JSON" not in parsed["narrative"]
+        assert parsed["narrative"].startswith("Volume fell 7%.")
+        assert "Margin held steady." in parsed["narrative"]
+        assert parsed["kpis"] == {"volume": {"month_a": 1}}
+
+    def test_plain_response_used_as_is(self):
+        from app.agent import _parse_analysis
+        parsed = _parse_analysis(self.NO_MARKERS_AT_ALL)
+        assert parsed["narrative"] == "Volume fell 7%. Margin held steady."
+
+    def test_kpi_block_stripped_when_no_narrative_marker(self):
+        from app.agent import _parse_analysis
+        parsed = _parse_analysis(self.KPI_ONLY_NO_NARRATIVE_MARKER)
+        assert "===" not in parsed["narrative"]
+        assert parsed["narrative"] == "Volume fell 7%."

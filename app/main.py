@@ -161,21 +161,30 @@ with st.sidebar:
     if not months:
         st.error("No data found in the table.")
         st.stop()
-    # Calculate default months based on today's date (skip future months)
-    from datetime import date, timedelta
 
-    _today = date.today()
-    # First day of previous month
-    _prev_month = (_today.replace(day=1) - timedelta(days=1)).replace(day=1)
-    # First day of two months ago
-    _two_months_ago = (_prev_month - timedelta(days=1)).replace(day=1)
+    if IS_DEMO:
+        # Demo dataset: hide its newest month (treated as in-progress) and
+        # default to the two most recent remaining months (Apr vs May 2026).
+        if len(months) > 2:
+            months = months[1:]
+        _idx_b = 0
+        _idx_a = min(1, len(months) - 1)
+    else:
+        # Calculate default months based on today's date (skip future months)
+        from datetime import date, timedelta
 
-    _prev_str = _prev_month.strftime("%Y-%m-%d")
-    _two_ago_str = _two_months_ago.strftime("%Y-%m-%d")
+        _today = date.today()
+        # First day of previous month
+        _prev_month = (_today.replace(day=1) - timedelta(days=1)).replace(day=1)
+        # First day of two months ago
+        _two_months_ago = (_prev_month - timedelta(days=1)).replace(day=1)
 
-    # Find the index of each target month in the list, fallback to 0
-    _idx_b = months.index(_prev_str) if _prev_str in months else 0
-    _idx_a = months.index(_two_ago_str) if _two_ago_str in months else min(1, len(months) - 1)
+        _prev_str = _prev_month.strftime("%Y-%m-%d")
+        _two_ago_str = _two_months_ago.strftime("%Y-%m-%d")
+
+        # Find the index of each target month in the list, fallback to 0
+        _idx_b = months.index(_prev_str) if _prev_str in months else 0
+        _idx_a = months.index(_two_ago_str) if _two_ago_str in months else min(1, len(months) - 1)
 
     month_a = st.selectbox("Month A (baseline)", options=months, index=_idx_a, key="month_a_select")
     month_b = st.selectbox("Month B (compare to)", options=months, index=_idx_b, key="month_b_select")

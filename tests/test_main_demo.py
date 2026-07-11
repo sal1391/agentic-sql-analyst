@@ -53,8 +53,14 @@ def test_app_renders_after_email_with_no_provider_controls():
     # months came from DuckDB demo data
     labels = [sb.label for sb in at.selectbox]
     assert "Month A (baseline)" in labels and "Month B (compare to)" in labels
+    # newest dataset month (2026-06) is hidden in demo; defaults are Apr vs May
     month_options = at.selectbox[0].options
-    assert "2026-06-01" in month_options and len(month_options) == 18
+    assert "2026-06-01" not in month_options and len(month_options) == 17
+    assert month_options[0] == "2026-05-01"
+    month_a = next(sb for sb in at.selectbox if sb.label == "Month A (baseline)")
+    month_b = next(sb for sb in at.selectbox if sb.label == "Month B (compare to)")
+    assert month_a.value == "2026-04-01"
+    assert month_b.value == "2026-05-01"
     # provider controls are gone
     assert len(at.radio) == 0
     assert all("model" not in (ti.label or "").lower() for ti in at.text_input)

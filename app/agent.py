@@ -467,8 +467,19 @@ def _parse_analysis(llm_response: str) -> dict:
     if narr_match:
         result["narrative"] = narr_match.group(1).strip()
     else:
-        # Fallback: use the full response as narrative
-        result["narrative"] = llm_response
+        # Fallback for models that drop the closing marker (or all markers):
+        # take everything after ===NARRATIVE=== if present, then strip any
+        # structured blocks so raw ===MARKER=== text never reaches the UI.
+        text = llm_response
+        open_match = re.search(r"===NARRATIVE===\s*(.*)", text, re.DOTALL)
+        if open_match:
+            text = open_match.group(1)
+        text = re.sub(r"===KPI_JSON===.*?(?:===END_KPI_JSON===|\Z)", "",
+                      text, flags=re.DOTALL)
+        text = re.sub(r"===TOP_MOVERS_JSON===.*?(?:===END_TOP_MOVERS_JSON===|\Z)", "",
+                      text, flags=re.DOTALL)
+        text = text.replace("===END_NARRATIVE===", "")
+        result["narrative"] = text.strip()
 
     # Extract top movers JSON
     movers_match = re.search(
