@@ -26,7 +26,7 @@ def quiet_and_stubbed(monkeypatch):
 
 
 def _state():
-    return {"demo_email": "t@example.com"}
+    return {"demo_ip": "203.0.113.7"}
 
 
 def test_on_topic_question_passes():
@@ -131,13 +131,13 @@ def test_classifier_uses_model_agnostic_params(monkeypatch):
     assert captured["temperature"] == 0  # GUARDRAIL_MODEL is a standard model
 
 
-def test_output_filter_logs_email_when_state_given(monkeypatch):
+def test_output_filter_logs_ip_when_state_given(monkeypatch):
     events = []
     monkeypatch.setattr(guardrails, "log_event", lambda kind, **f: events.append((kind, f)))
-    state = {"demo_email": "t@example.com"}
+    state = {"demo_ip": "203.0.113.7"}
     assert guardrails.filter_output("I am ChatGPT", state) == BLOCK_MESSAGE
     assert events and events[0][0] == "output_filtered"
-    assert events[0][1]["email"] == "t@example.com"
+    assert events[0][1]["ip"] == "203.0.113.7"
 
 
 def test_llm_safe_history_drops_all_canned_rejections():

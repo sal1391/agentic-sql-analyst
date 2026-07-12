@@ -49,9 +49,13 @@ def is_valid_email(email) -> bool:
     return bool(_EMAIL_RE.match(str(email).strip()))
 
 
-def require_email() -> bool:
-    """True if the visitor has already entered an email; otherwise render the gate."""
-    if st.session_state.get("demo_email"):
+def require_start() -> bool:
+    """True once the visitor has started the demo; otherwise render the start gate.
+
+    No email is collected — the visitor's IP is recorded on start (for abuse
+    prevention) and the per-IP rate limit is enforced here.
+    """
+    if st.session_state.get("demo_started"):
         return True
 
     _, mid, _ = st.columns([1, 2, 1])
@@ -59,33 +63,26 @@ def require_email() -> bool:
         if os.path.exists(_TRIDENT_PATH):
             st.image(_TRIDENT_PATH, width=96)
         st.markdown("## Month-over-Month Comparison")
-        st.markdown("Enter your email address to start the demo.")
-        with st.form("email_gate_form"):
-            email = st.text_input("Email address", key="email_gate_input",
-                                  placeholder="you@company.com")
-            render_turnstile_widget()  # no-op unless Turnstile env vars are set
-            submitted = st.form_submit_button("Start", type="primary",
-                                              use_container_width=True)
+        st.markdown("Click Start to begin the demo.")
+        render_turnstile_widget()  # no-op unless Turnstile env vars are set
+        started = st.button("Start", type="primary", use_container_width=True)
         render_privacy_notice()
-        if submitted:
-            email = (email or "").strip()
-            if not is_valid_email(email):
-                st.error("Please enter a valid email address.")
+        if started:
+            ip = get_client_ip()
+            # 1. Turnstile (env-gated; passes through while disabled)
+            token = st.session_state.get("cf_turnstile_token", "")
+            if not verify_turnstile(token, ip):
+                st.error("Verification failed. Please try again.")
+            # 2. Rate limit
+            elif is_rate_limited(ip):
+                log_event("demo_start_rate_limited", ip=ip)
+                st.error("Too many attempts from your network. "
+                         "Please try again later.")
+            # 3. Accept: record IP + start
             else:
-                ip = get_client_ip()
-                # 1. Turnstile (env-gated; passes through while disabled)
-                token = st.session_state.get("cf_turnstile_token", "")
-                if not verify_turnstile(token, ip):
-                    st.error("Verification failed. Please try again.")
-                # 2. Rate limit
-                elif is_rate_limited(ip):
-                    log_event("email_gate_rate_limited", ip=ip)
-                    st.error("Too many attempts from your network. "
-                             "Please try again later.")
-                # 3. Accept + log (unchanged logging, now with IP)
-                else:
-                    record_attempt(ip)
-                    st.session_state.demo_email = email
-                    log_event("email_entry", email=email, ip=ip)
-                    st.rerun()
+                record_attempt(ip)
+                st.session_state.demo_started = True
+                st.session_state.demo_ip = ip
+                log_event("demo_start", ip=ip)
+                st.rerun()
     return False
