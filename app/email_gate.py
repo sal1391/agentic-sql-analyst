@@ -32,6 +32,11 @@ except ImportError:
         verify_turnstile,
     )
 
+try:
+    from app.privacy import render_privacy_notice
+except ImportError:
+    from privacy import render_privacy_notice
+
 _EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$")
 
 _ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
@@ -61,6 +66,7 @@ def require_email() -> bool:
             render_turnstile_widget()  # no-op unless Turnstile env vars are set
             submitted = st.form_submit_button("Start", type="primary",
                                               use_container_width=True)
+        render_privacy_notice()
         if submitted:
             email = (email or "").strip()
             if not is_valid_email(email):
