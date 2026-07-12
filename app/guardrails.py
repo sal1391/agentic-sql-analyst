@@ -111,7 +111,7 @@ def _record_strike(state, question: str, layer: str) -> None:
         state["gr_locked"] = True
     log_event(
         "guardrail_violation",
-        email=state.get("demo_email", ""),
+        ip=state.get("demo_ip", ""),
         layer=layer,
         question=question[:200],
         strikes=state["gr_strikes"],
@@ -185,7 +185,7 @@ def filter_output(text: str, state=None) -> str:
     if text and _LEAK_PATTERNS.search(text):
         log_event(
             "output_filtered",
-            email=state.get("demo_email", "") if state else "",
+            ip=state.get("demo_ip", "") if state else "",
             snippet=text[:200],
         )
         return BLOCK_MESSAGE

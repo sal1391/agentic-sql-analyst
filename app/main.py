@@ -15,7 +15,7 @@ try:
     from app.components.charts import render_comparison_charts, render_metric_selector
     from app.components.narrative import render_narrative, render_top_movers, render_new_lost, escape_dollars
     from app import guardrails
-    from app.email_gate import require_email
+    from app.email_gate import require_start
 except ImportError:
     from config import LLM_PROVIDER, CORTEX_MODEL, AZURE_MODEL, FULLY_QUALIFIED_TABLE, DEPLOY_MODE, IS_DEMO
     from agent import DIMENSIONS, run_comparison, run_followup
@@ -23,7 +23,7 @@ except ImportError:
     from components.charts import render_comparison_charts, render_metric_selector
     from components.narrative import render_narrative, render_top_movers, render_new_lost, escape_dollars
     import guardrails
-    from email_gate import require_email
+    from email_gate import require_start
 
 if IS_DEMO:
     try:
@@ -53,7 +53,7 @@ st.set_page_config(
     layout="wide",
 )
 
-if IS_DEMO and not require_email():
+if IS_DEMO and not require_start():
     st.stop()
 
 st.title("📊 Month-over-Month Comparison")
