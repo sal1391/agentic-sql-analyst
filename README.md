@@ -16,7 +16,7 @@ The `skills/` folder is the LLM's knowledge base — it contains the data model,
 ## Demo mode (default — no Snowflake needed)
 
 The app ships with a built-in demo: 18 months of realistic (fake) marine-fuel
-transactions in an in-process DuckDB, an AI analyst, an email gate, and strict
+transactions in an in-process DuckDB, an AI analyst, a rate-limited start screen, and strict
 topic guardrails on the chat.
 
 **Run locally:**
